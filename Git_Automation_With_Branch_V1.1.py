@@ -28,6 +28,23 @@ def get_git_repos(base_path):
     return repos
 
 
+def get_branches(repo_path):
+    """Returns a list of branches in the selected Git repository."""
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--list"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True
+        )
+        branches = result.stdout.strip().split("\n")
+        branches = [branch.strip().replace("* ", "") for branch in branches]
+        return branches
+    except subprocess.CalledProcessError as e:
+        log_message(f"Error fetching branches: {e}", "ERROR")
+        return []
+
+
 def get_modified_files(repo_path):
     """Gets the list of modified files in the selected Git repository."""
     try:
@@ -47,6 +64,7 @@ def get_modified_files(repo_path):
 def refresh_modified_files():
     """Refreshes the list of modified files displayed below the buttons."""
     selected_repo = repo_var.get()
+    selected_branch = branch_var.get()
     if not os.path.isdir(selected_repo):
         log_message(f"Invalid repository path: {selected_repo}", "ERROR")
         return
@@ -63,59 +81,32 @@ def refresh_modified_files():
     log_message("Modified files list refreshed.", "INFO")
 
 
-def enable_refresh_button(event):
-    """Enables the refresh button once a repository is selected."""
-    refresh_button.config(state=tk.NORMAL)
-
-
-def update_progress(step, total_steps):
-    """Update the progress bar based on the current step."""
-    progress_value = (step / total_steps) * 100
-    progress_bar["value"] = progress_value
-    root.update_idletasks()
-
-
-def clone_repository():
-    """Clones a GitHub repository into the specified directory."""
-    repo_url = clone_url_entry.get().strip()
-    if not repo_url:
-        log_message("Repository URL cannot be empty.", "ERROR")
-        return
-
-    destination_dir = base_path
-    log_message(f"Cloning repository from {repo_url} into {destination_dir}...")
-    try:
-        subprocess.run(["git", "clone", repo_url], cwd=destination_dir, check=True)
-        log_message("Repository cloned successfully.", "SUCCESS")
-        refresh_repo_list()  # Refresh the dropdown with the new repository
-    except subprocess.CalledProcessError as e:
-        log_message(f"Failed to clone repository: {e}", "ERROR")
-
-
-def refresh_repo_list():
-    """Refreshes the repository list in the dropdown."""
-    repos = get_git_repos(base_path)
-    repo_dropdown["values"] = repos
-    repo_dropdown["width"] = calculate_combobox_width(repos)
-    log_message("Repository list refreshed.", "INFO")
+def enable_refresh_button():
+    """Enables the refresh button once a repository and branch are selected."""
+    if repo_var.get() and branch_var.get():
+        refresh_button.config(state=tk.NORMAL)
+    else:
+        refresh_button.config(state=tk.DISABLED)
 
 
 def generate_and_push():
+    """Stages, commits, and pushes changes to the selected branch of the repository."""
     try:
         # Disable the button
         button.config(state=tk.DISABLED)
 
-        # Clear the log and reset the progress bar
+        # Clear the log
         log_text.delete("1.0", tk.END)
-        progress_bar["value"] = 0
 
-        # Get the selected repository path
+        # Get the selected repository and branch
         selected_repo = repo_var.get()
+        branch = branch_var.get()
+
         if not os.path.isdir(selected_repo):
             raise Exception(f"The selected path '{selected_repo}' is not valid.")
 
         log_message(f"Selected repository path: {selected_repo}")
-        branch = "main"  # Branch name
+        log_message(f"Target branch: {branch}")
 
         # Get the commit message
         commit_message = commit_msg_text.get("1.0", tk.END).strip()
@@ -125,11 +116,8 @@ def generate_and_push():
         log_message("Process started.")
         start_time = time.time()
 
-        total_steps = 4  # Define the total number of steps
-
-        # Step 1: Stage all changes
+        # Stage all changes
         log_message("Staging all changes in the repository...")
-        update_progress(1, total_steps)
         subprocess.run(["git", "add", "."], cwd=selected_repo, check=True)
         log_message("All changes staged successfully.", "SUCCESS")
 
@@ -143,9 +131,8 @@ def generate_and_push():
             log_message("Process completed successfully.", "SUCCESS")
             return  # No changes to commit, exit early
 
-        # Step 2: Commit changes
+        # Commit the changes
         log_message(f"Committing changes with message: '{commit_message}'...")
-        update_progress(2, total_steps)
         subprocess.run(
             ["git", "commit", "-m", commit_message],
             cwd=selected_repo,
@@ -153,16 +140,13 @@ def generate_and_push():
         )
         log_message(f"Changes committed with message: '{commit_message}'", "SUCCESS")
 
-        # Step 3: Push changes
+        # Push the changes
         log_message(f"Pushing changes to branch: {branch}...")
-        update_progress(3, total_steps)
         subprocess.run(["git", "push", "origin", branch], cwd=selected_repo, check=True)
         log_message(f"Changes pushed to branch '{branch}' successfully!", "SUCCESS")
 
-        # Final Step: Complete the process
         elapsed_time = time.time() - start_time
         log_message(f"Process completed successfully in {elapsed_time:.2f} seconds!", "SUCCESS")
-        update_progress(total_steps, total_steps)
     except subprocess.CalledProcessError as e:
         log_message(f"Git operation failed: {e}", "ERROR")
     except Exception as e:
@@ -172,9 +156,35 @@ def generate_and_push():
         button.config(state=tk.NORMAL)
 
 
+def clone_repository():
+    """Clones a GitHub repository into the base path."""
+    try:
+        repo_url = clone_url_text.get("1.0", tk.END).strip()
+        if not repo_url:
+            log_message("Please enter a valid GitHub repository URL.", "ERROR")
+            return
+
+        # Clone the repository into the base path
+        log_message(f"Cloning repository from {repo_url} into {base_path}...")
+        subprocess.run(["git", "clone", repo_url], cwd=base_path, check=True)
+        log_message(f"Repository cloned successfully from {repo_url}!", "SUCCESS")
+
+        # Refresh the repository dropdown with the new repo
+        new_repos = get_git_repos(base_path)
+        repo_dropdown["values"] = new_repos
+        log_message("Repository list updated.", "INFO")
+    except subprocess.CalledProcessError as e:
+        log_message(f"Git clone operation failed: {e}", "ERROR")
+    except Exception as e:
+        log_message(f"An error occurred while cloning: {e}", "ERROR")
+
+
 # GUI setup
 root = tk.Tk()
-root.title("Git Automation Tool with Clone Functionality and Progress Bar")
+root.title("Git Automation Tool by Shubham Sajannavar")
+
+# Base path for repositories
+base_path = "C:/Users/shsa0222/Desktop/DevOps"  # Change this to your base path
 
 # Left panel: Repository selection and actions
 left_frame = tk.Frame(root)
@@ -185,12 +195,40 @@ repo_label.pack(pady=5)
 
 repo_var = tk.StringVar()
 repo_dropdown = ttk.Combobox(left_frame, textvariable=repo_var, state="readonly")
-base_path = "C:/Users/shsa0222/Desktop/DevOps"  # Change this to your base path
 repos = get_git_repos(base_path)
 repo_dropdown["values"] = repos
 repo_dropdown["width"] = calculate_combobox_width(repos)
 repo_dropdown.pack(pady=5)
-repo_dropdown.bind("<<ComboboxSelected>>", enable_refresh_button)  # Enable refresh button on selection
+
+def update_branch_dropdown(event):
+    """Updates the branch dropdown with the branches of the selected repository."""
+    selected_repo = repo_var.get()
+    if not os.path.isdir(selected_repo):
+        log_message(f"Invalid repository path: {selected_repo}", "ERROR")
+        return
+
+    branches = get_branches(selected_repo)
+    if branches:
+        branch_var.set("main" if "main" in branches else branches[0])  # Default to 'main' if available
+        branch_dropdown["values"] = branches
+        branch_dropdown.config(state="readonly")  # Enable the branch dropdown
+    else:
+        branch_var.set("")  # Clear the branch selection
+        branch_dropdown["values"] = []  # Clear dropdown options
+
+    # Enable the refresh button if both repo and branch are selected
+    enable_refresh_button()
+
+repo_dropdown.bind("<<ComboboxSelected>>", update_branch_dropdown)
+
+branch_label = tk.Label(left_frame, text="Select Branch:")
+branch_label.pack(pady=5)
+
+branch_var = tk.StringVar()
+branch_dropdown = ttk.Combobox(left_frame, textvariable=branch_var, state="readonly")
+branch_dropdown.pack(pady=5)
+
+branch_dropdown.bind("<<ComboboxSelected>>", lambda event: enable_refresh_button())
 
 commit_msg_label = tk.Label(left_frame, text="Commit Message (Optional):")
 commit_msg_label.pack(pady=5)
@@ -210,22 +248,15 @@ file_list_label.pack(pady=5)
 file_list_text = tk.Text(left_frame, height=10, width=50, state="normal")
 file_list_text.pack(pady=5)
 
-# Clone Repository
-clone_label = tk.Label(left_frame, text="Clone Repository (GitHub URL):")
+# Git Clone Section
+clone_label = tk.Label(left_frame, text="Clone GitHub Repository:")
 clone_label.pack(pady=5)
 
-clone_url_entry = tk.Entry(left_frame, width=50)
-clone_url_entry.pack(pady=5)
+clone_url_text = tk.Text(left_frame, height=1, width=50)
+clone_url_text.pack(pady=5)
 
 clone_button = tk.Button(left_frame, text="Clone Repository", command=clone_repository)
-clone_button.pack(pady=10)
-
-# Progress bar
-progress_label = tk.Label(left_frame, text="Progress:")
-progress_label.pack(pady=5)
-
-progress_bar = ttk.Progressbar(left_frame, orient="horizontal", length=300, mode="determinate")
-progress_bar.pack(pady=5)
+clone_button.pack(pady=5)
 
 # Right panel: Logs
 right_frame = tk.Frame(root, relief=tk.SUNKEN, borderwidth=1)
