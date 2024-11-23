@@ -9,10 +9,8 @@ import time
 def log_message(message, status="INFO"):
     """Logs a message with a timestamp and status to the side panel."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_text.configure(state="normal")  # Enable writing to log panel
     log_text.insert(tk.END, f"[{timestamp}] [{status}] {message}\n")
     log_text.see(tk.END)  # Auto-scroll
-    log_text.configure(state="disabled")  # Set back to read-only
 
 
 def calculate_combobox_width(items):
@@ -56,14 +54,12 @@ def refresh_modified_files():
     modified_files = get_modified_files(selected_repo)
 
     # Update the file list below the buttons
-    file_list_text.configure(state="normal")  # Enable writing to modified files panel
     file_list_text.delete("1.0", tk.END)  # Clear the current list
     if modified_files:
         for file in modified_files:
             file_list_text.insert(tk.END, f"{file}\n")
     else:
         file_list_text.insert(tk.END, "No modified files found.\n")
-    file_list_text.configure(state="disabled")  # Set back to read-only
     log_message("Modified files list refreshed.", "INFO")
 
 
@@ -110,9 +106,7 @@ def generate_and_push():
         button.config(state=tk.DISABLED)
 
         # Clear the log and reset the progress bar
-        log_text.configure(state="normal")  # Enable writing to log panel
         log_text.delete("1.0", tk.END)
-        log_text.configure(state="disabled")  # Set back to read-only
         progress_bar["value"] = 0
 
         # Get the selected repository path
@@ -180,7 +174,7 @@ def generate_and_push():
 
 # GUI setup
 root = tk.Tk()
-root.title("Git Automation Tool with Read-Only Panels")
+root.title("Git Automation Tool with Clone Functionality and Progress Bar")
 
 # Left panel: Repository selection and actions
 left_frame = tk.Frame(root)
@@ -213,7 +207,7 @@ refresh_button.pack(pady=5)
 file_list_label = tk.Label(left_frame, text="Modified Files:")
 file_list_label.pack(pady=5)
 
-file_list_text = tk.Text(left_frame, height=10, width=50, state="disabled")
+file_list_text = tk.Text(left_frame, height=10, width=50, state="normal")
 file_list_text.pack(pady=5)
 
 # Clone Repository
@@ -240,7 +234,7 @@ right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 log_label = tk.Label(right_frame, text="Logs:")
 log_label.pack(pady=5)
 
-log_text = tk.Text(right_frame, height=25, width=60, state="disabled")
+log_text = tk.Text(right_frame, height=25, width=60, state="normal")
 log_text.pack(pady=5)
 
 # Start the GUI loop
