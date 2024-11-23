@@ -1,8 +1,3 @@
-# Python-GitHub-Automation-Tool
-Here's a sample `README.md` file for your Git Automation Tool:
-
----
-
 # Git Automation Tool
 
 A simple and efficient **Git Automation Tool** built with Python and Tkinter to manage Git repositories with ease. This tool allows you to clone repositories, manage branches, view modified files, and push changes—all through a user-friendly graphical interface.
@@ -126,8 +121,4 @@ Contributions are welcome!
 
 ## License
 
-This project is licensed under the MIT License.  
-
----
-
-Let me know if you'd like to add screenshots, badges, or further sections!
+This project is licensed under the MIT License.
