@@ -76,7 +76,6 @@ def update_progress(step, total_steps):
     """Update the progress bar based on the current step."""
     progress_value = (step / total_steps) * 100
     progress_bar["value"] = progress_value
-    progress_label_percent.config(text=f"{progress_value:.0f}%")  # Show percentage
     root.update_idletasks()
 
 
@@ -181,10 +180,10 @@ def generate_and_push():
 
 # GUI setup
 root = tk.Tk()
-root.title("Git Automation Tool")
+root.title("Git Automation Tool with Read-Only Panels")
 
 # Left panel: Repository selection and actions
-left_frame = tk.Frame(root, padx=10, pady=10)
+left_frame = tk.Frame(root)
 left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 repo_label = tk.Label(left_frame, text="Select Repository:")
@@ -224,27 +223,25 @@ clone_label.pack(pady=5)
 clone_url_entry = tk.Entry(left_frame, width=50)
 clone_url_entry.pack(pady=5)
 
-clone_button = tk.Button(left_frame, text="Clone", command=clone_repository)
-clone_button.pack(pady=5)
+clone_button = tk.Button(left_frame, text="Clone Repository", command=clone_repository)
+clone_button.pack(pady=10)
 
-# Right panel: Log area and progress bar
-right_frame = tk.Frame(root, padx=10, pady=10)
+# Progress bar
+progress_label = tk.Label(left_frame, text="Progress:")
+progress_label.pack(pady=5)
+
+progress_bar = ttk.Progressbar(left_frame, orient="horizontal", length=300, mode="determinate")
+progress_bar.pack(pady=5)
+
+# Right panel: Logs
+right_frame = tk.Frame(root, relief=tk.SUNKEN, borderwidth=1)
 right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 log_label = tk.Label(right_frame, text="Logs:")
-log_label.pack(anchor="w")
+log_label.pack(pady=5)
 
 log_text = tk.Text(right_frame, height=25, width=60, state="disabled")
-log_text.pack(fill=tk.BOTH, expand=True)
+log_text.pack(pady=5)
 
-progress_bar_label = tk.Label(right_frame, text="Progress:")
-progress_bar_label.pack(anchor="w", pady=5)
-
-progress_bar = ttk.Progressbar(right_frame, orient="horizontal", mode="determinate")
-progress_bar.pack(fill=tk.X, pady=5)
-
-progress_label_percent = tk.Label(right_frame, text="0%")
-progress_label_percent.pack(anchor="e")
-
-# Initialize the application
+# Start the GUI loop
 root.mainloop()
