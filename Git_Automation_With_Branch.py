@@ -73,9 +73,10 @@ def enable_refresh_button(event):
 
 
 def update_progress(step, total_steps):
-    """Update the progress bar based on the current step."""
+    """Update the progress bar based on the current step and show percentage."""
     progress_value = (step / total_steps) * 100
     progress_bar["value"] = progress_value
+    progress_label_percent.config(text=f"{progress_value:.0f}%")  # Update percentage label
     root.update_idletasks()
 
 
@@ -114,6 +115,7 @@ def generate_and_push():
         log_text.delete("1.0", tk.END)
         log_text.configure(state="disabled")  # Set back to read-only
         progress_bar["value"] = 0
+        progress_label_percent.config(text="0%")  # Reset percentage label
 
         # Get the selected repository path
         selected_repo = repo_var.get()
@@ -180,7 +182,7 @@ def generate_and_push():
 
 # GUI setup
 root = tk.Tk()
-root.title("Git Automation Tool with Read-Only Panels")
+root.title("Git Automation Tool with Progress Percentage")
 
 # Left panel: Repository selection and actions
 left_frame = tk.Frame(root)
@@ -232,6 +234,9 @@ progress_label.pack(pady=5)
 
 progress_bar = ttk.Progressbar(left_frame, orient="horizontal", length=300, mode="determinate")
 progress_bar.pack(pady=5)
+
+progress_label_percent = tk.Label(left_frame, text="0%")  # Label to show progress percentage
+progress_label_percent.pack(pady=5)
 
 # Right panel: Logs
 right_frame = tk.Frame(root, relief=tk.SUNKEN, borderwidth=1)
