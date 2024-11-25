@@ -7,7 +7,7 @@ import time
 
 
 def log_message(message, status="INFO"):
-    """Logs a message with a timestamp and status to the log panel."""
+    """Logs a message with a timestamp and status to the side panel."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     log_text.configure(state="normal")  # Enable writing to log panel
     log_text.insert(tk.END, f"[{timestamp}] [{status}] {message}\n")
@@ -47,7 +47,7 @@ def get_modified_files(repo_path):
 
 
 def refresh_modified_files():
-    """Refreshes the list of modified files and enables/disables the 'Generate and Push' button."""
+    """Refreshes the list of modified files displayed below the buttons."""
     selected_repo = repo_var.get()
     if not os.path.isdir(selected_repo):
         log_message(f"Invalid repository path: {selected_repo}", "ERROR")
@@ -61,10 +61,8 @@ def refresh_modified_files():
     if modified_files:
         for file in modified_files:
             file_list_text.insert(tk.END, f"{file}\n")
-        button.config(state=tk.NORMAL)  # Enable the 'Generate and Push' button
     else:
         file_list_text.insert(tk.END, "No modified files found.\n")
-        button.config(state=tk.DISABLED)  # Disable the 'Generate and Push' button
     file_list_text.configure(state="disabled")  # Set back to read-only
     log_message("Modified files list refreshed.", "INFO")
 
@@ -75,10 +73,10 @@ def enable_refresh_button(event):
 
 
 def update_progress(step, total_steps):
-    """Update the progress bar based on the current step and display percentage."""
+    """Update the progress bar based on the current step."""
     progress_value = (step / total_steps) * 100
     progress_bar["value"] = progress_value
-    progress_label.config(text=f"Progress: {progress_value:.0f}%")
+    progress_label_percent.config(text=f"{progress_value:.0f}%")  # Show percentage
     root.update_idletasks()
 
 
@@ -108,7 +106,6 @@ def refresh_repo_list():
 
 
 def generate_and_push():
-    """Stages, commits, and pushes changes in the selected repository."""
     try:
         # Disable the button
         button.config(state=tk.DISABLED)
@@ -118,7 +115,6 @@ def generate_and_push():
         log_text.delete("1.0", tk.END)
         log_text.configure(state="disabled")  # Set back to read-only
         progress_bar["value"] = 0
-        progress_label.config(text="Progress: 0%")
 
         # Get the selected repository path
         selected_repo = repo_var.get()
@@ -179,8 +175,8 @@ def generate_and_push():
     except Exception as e:
         log_message(f"An error occurred: {e}", "ERROR")
     finally:
-        # Re-enable the button if changes exist
-        refresh_modified_files()
+        # Re-enable the button
+        button.config(state=tk.NORMAL)
 
 
 # GUI setup
@@ -188,7 +184,7 @@ root = tk.Tk()
 root.title("Git Automation Tool")
 
 # Left panel: Repository selection and actions
-left_frame = tk.Frame(root)
+left_frame = tk.Frame(root, padx=10, pady=10)
 left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 repo_label = tk.Label(left_frame, text="Select Repository:")
@@ -201,7 +197,7 @@ repos = get_git_repos(base_path)
 repo_dropdown["values"] = repos
 repo_dropdown["width"] = calculate_combobox_width(repos)
 repo_dropdown.pack(pady=5)
-repo_dropdown.bind("<<ComboboxSelected>>", enable_refresh_button)
+repo_dropdown.bind("<<ComboboxSelected>>", enable_refresh_button)  # Enable refresh button on selection
 
 commit_msg_label = tk.Label(left_frame, text="Commit Message (Optional):")
 commit_msg_label.pack(pady=5)
@@ -209,7 +205,7 @@ commit_msg_label.pack(pady=5)
 commit_msg_text = tk.Text(left_frame, height=3, width=50)
 commit_msg_text.pack(pady=5)
 
-button = tk.Button(left_frame, text="Generate and Push", command=generate_and_push, state=tk.DISABLED)
+button = tk.Button(left_frame, text="Generate and Push", command=generate_and_push)
 button.pack(pady=10)
 
 refresh_button = tk.Button(left_frame, text="Refresh Modified Files", command=refresh_modified_files, state=tk.DISABLED)
@@ -228,24 +224,27 @@ clone_label.pack(pady=5)
 clone_url_entry = tk.Entry(left_frame, width=50)
 clone_url_entry.pack(pady=5)
 
-clone_button = tk.Button(left_frame, text="Clone Repository", command=clone_repository)
-clone_button.pack(pady=10)
+clone_button = tk.Button(left_frame, text="Clone", command=clone_repository)
+clone_button.pack(pady=5)
 
-# Right panel: Log and Progress bar
-right_frame = tk.Frame(root)
+# Right panel: Log area and progress bar
+right_frame = tk.Frame(root, padx=10, pady=10)
 right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-log_label = tk.Label(right_frame, text="Log:")
-log_label.pack(pady=5)
+log_label = tk.Label(right_frame, text="Logs:")
+log_label.pack(anchor="w")
 
-log_text = tk.Text(right_frame, height=25, width=80, state="disabled")
-log_text.pack(pady=5)
+log_text = tk.Text(right_frame, height=25, width=60, state="disabled")
+log_text.pack(fill=tk.BOTH, expand=True)
 
-progress_label = tk.Label(right_frame, text="Progress: 0%")
-progress_label.pack(pady=5)
+progress_bar_label = tk.Label(right_frame, text="Progress:")
+progress_bar_label.pack(anchor="w", pady=5)
 
-progress_bar = ttk.Progressbar(right_frame, orient="horizontal", length=400, mode="determinate")
-progress_bar.pack(pady=5)
+progress_bar = ttk.Progressbar(right_frame, orient="horizontal", mode="determinate")
+progress_bar.pack(fill=tk.X, pady=5)
 
-refresh_repo_list()  # Populate the dropdown with the initial repository list
+progress_label_percent = tk.Label(right_frame, text="0%")
+progress_label_percent.pack(anchor="e")
+
+# Initialize the application
 root.mainloop()
