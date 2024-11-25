@@ -1,327 +1,223 @@
-import os
-import subprocess
 import tkinter as tk
+from tkinter import messagebox, filedialog, simpledialog
 from tkinter import ttk
-from datetime import datetime
-import time
+import subprocess
+import os
+import threading
 
+class GitApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("GitHub Operations")
+        self.root.geometry("700x500")
 
-def log_message(message, status="INFO"):
-    """Logs a message with a timestamp and status to the log panel."""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_text.configure(state="normal")  # Enable writing to log panel
-    log_text.insert(tk.END, f"[{timestamp}] [{status}] {message}\n")
-    log_text.see(tk.END)  # Auto-scroll
-    log_text.configure(state="disabled")  # Set back to read-only
+        # Repository Path and Branch
+        self.repo_path = None
+        self.current_branch = None
 
+        # Base directory containing multiple repositories
+        self.base_repo_path = None
 
-def calculate_combobox_width(items):
-    """Calculate the appropriate width for the combobox based on the longest item."""
-    max_item_length = max(len(item) for item in items) if items else 20  # Default to 20 if empty
-    return max_item_length + 2  # Add padding for readability
+        # GitHub Authentication
+        self.github_token = None
 
+        # Initialize UI Components
+        self.create_widgets()
 
-def get_git_repos(base_path):
-    """Returns a list of Git repository directories from the base path."""
-    repos = []
-    for root, dirs, files in os.walk(base_path):
-        if '.git' in dirs:  # Check if it's a git repository
-            repos.append(root)  # Add the full path of the repository
-    return repos
+    def create_widgets(self):
+        # Base Repo Directory Selection
+        self.select_base_repo_button = tk.Button(self.root, text="Select Base Repo Directory", command=self.select_base_repo)
+        self.select_base_repo_button.pack(pady=10)
 
+        # Repo Selection from Base Directory
+        self.repo_label = tk.Label(self.root, text="Select Repo:")
+        self.repo_label.pack()
 
-def get_modified_files(repo_path):
-    """Gets the list of modified files in the selected Git repository."""
-    try:
-        result = subprocess.run(
-            ["git", "status", "--short"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True
-        )
-        files = result.stdout.strip().split("\n")
-        return [f.strip() for f in files if f]  # Filter out empty lines
-    except subprocess.CalledProcessError as e:
-        log_message(f"Error fetching modified files: {e}", "ERROR")
-        return []
+        self.repo_combobox = ttk.Combobox(self.root)
+        self.repo_combobox.pack(pady=5)
+        self.repo_combobox.bind("<<ComboboxSelected>>", self.on_repo_selected)
 
+        # Branch Selection
+        self.branch_label = tk.Label(self.root, text="Select Branch:")
+        self.branch_label.pack()
 
-def get_git_branches(repo_path):
-    """Gets the list of all branches (local and remote) in the selected Git repository."""
-    try:
-        result = subprocess.run(
-            ["git", "branch", "--all"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True
-        )
-        branches = result.stdout.strip().split("\n")
-        # Clean branches by removing the leading spaces and "remotes/" from remote branches
-        return [branch.strip().replace("remotes/", "").strip() for branch in branches if branch.strip()]
-    except subprocess.CalledProcessError as e:
-        log_message(f"Error fetching branches: {e}", "ERROR")
-        return []
+        self.branch_combobox = ttk.Combobox(self.root)
+        self.branch_combobox.pack(pady=5)
+        self.branch_combobox.config(state=tk.DISABLED)
 
+        # Progress Bar
+        self.progress = ttk.Progressbar(self.root, orient="horizontal", length=400, mode="indeterminate")
+        self.progress.pack(pady=10)
 
-def refresh_modified_files():
-    """Refreshes the list of modified files and enables/disables the 'Generate and Push' button."""
-    selected_repo = repo_var.get()
-    if not os.path.isdir(selected_repo):
-        log_message(f"Invalid repository path: {selected_repo}", "ERROR")
-        return
+        # Log Text Box
+        self.log_text = tk.Text(self.root, height=8, width=70)
+        self.log_text.pack(pady=10)
+        self.log_text.config(state=tk.DISABLED)
 
-    modified_files = get_modified_files(selected_repo)
+        # Git Operations Buttons
+        self.git_config_button = tk.Button(self.root, text="Git Config", command=self.git_config)
+        self.git_config_button.pack(pady=5)
 
-    # Update the file list below the buttons
-    file_list_text.configure(state="normal")  # Enable writing to modified files panel
-    file_list_text.delete("1.0", tk.END)  # Clear the current list
-    if modified_files:
-        for file in modified_files:
-            file_list_text.insert(tk.END, f"{file}\n")
-        button.config(state=tk.NORMAL)  # Enable the 'Generate and Push' button
-    else:
-        file_list_text.insert(tk.END, "No modified files found.\n")
-        button.config(state=tk.DISABLED)  # Disable the 'Generate and Push' button
-    file_list_text.configure(state="disabled")  # Set back to read-only
-    log_message("Modified files list refreshed.", "INFO")
+        self.git_clone_button = tk.Button(self.root, text="Git Clone", command=self.git_clone)
+        self.git_clone_button.pack(pady=5)
 
+        self.git_add_button = tk.Button(self.root, text="Git Add", command=self.git_add)
+        self.git_add_button.pack(pady=5)
 
-def enable_refresh_button(event):
-    """Enables the refresh button once a repository is selected."""
-    refresh_button.config(state=tk.NORMAL)
-    update_branch_dropdown()  # Update branch dropdown
+        self.git_commit_button = tk.Button(self.root, text="Git Commit", command=self.git_commit)
+        self.git_commit_button.pack(pady=5)
 
+        self.git_push_button = tk.Button(self.root, text="Git Push", command=self.git_push)
+        self.git_push_button.pack(pady=5)
 
-def update_branch_dropdown():
-    """Updates the branch dropdown with all branches for the selected repository."""
-    selected_repo = repo_var.get()
-    if not os.path.isdir(selected_repo):
-        log_message(f"Invalid repository path: {selected_repo}", "ERROR")
-        return
+        self.git_pull_button = tk.Button(self.root, text="Git Pull", command=self.git_pull)
+        self.git_pull_button.pack(pady=5)
 
-    # Fetch the branches using `git branch --all`
-    branches = get_git_branches(selected_repo)
-    if branches:
-        branch_dropdown["values"] = branches
-        branch_dropdown.set(branches[0])  # Automatically select the first branch
-    else:
-        branch_dropdown["values"] = []
-        log_message("No branches found in the repository.", "INFO")
+        self.git_branch_button = tk.Button(self.root, text="Git Branch", command=self.git_branch)
+        self.git_branch_button.pack(pady=5)
 
-    # Adjust the width of the branch dropdown based on the longest branch name
-    branch_dropdown["width"] = calculate_combobox_width(branches)
+        self.git_merge_button = tk.Button(self.root, text="Git Merge", command=self.git_merge)
+        self.git_merge_button.pack(pady=5)
 
+        # GitHub Token Authentication Button
+        self.git_auth_button = tk.Button(self.root, text="Authenticate with GitHub", command=self.authenticate_github)
+        self.git_auth_button.pack(pady=10)
 
-def update_progress(step, total_steps):
-    """Update the progress bar based on the current step and display percentage."""
-    progress_value = (step / total_steps) * 100
-    progress_bar["value"] = progress_value
-    progress_label.config(text=f"Progress: {progress_value:.0f}%")
-    root.update_idletasks()
+    def update_log(self, message):
+        """Update the log in the text box."""
+        self.log_text.config(state=tk.NORMAL)
+        self.log_text.insert(tk.END, message + "\n")
+        self.log_text.yview(tk.END)
+        self.log_text.config(state=tk.DISABLED)
 
+    def run_git_command(self, command):
+        """Run Git commands and log output."""
+        try:
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, cwd=self.repo_path)
+            self.update_log(result.stdout)
+            self.update_log(result.stderr)
+        except subprocess.CalledProcessError as e:
+            self.update_log(f"Error: {e.stderr}")
 
-def fetch_repo():
-    """Fetches the latest changes from the remote repository."""
-    selected_repo = repo_var.get()
-    if not os.path.isdir(selected_repo):
-        log_message(f"Invalid repository path: {selected_repo}", "ERROR")
-        return
+    def run_command_with_progress(self, command):
+        """Run a long-running Git command (like clone or pull) with progress indication."""
+        self.progress.start()
+        try:
+            result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True, cwd=self.repo_path)
+            self.update_log(result.stdout)
+            self.update_log(result.stderr)
+        except subprocess.CalledProcessError as e:
+            self.update_log(f"Error: {e.stderr}")
+        finally:
+            self.progress.stop()
 
-    try:
-        log_message("Fetching the latest changes from the remote repository...")
-        subprocess.run(["git", "fetch"], cwd=selected_repo, check=True)
-        log_message("Repository fetched successfully.", "SUCCESS")
-    except subprocess.CalledProcessError as e:
-        log_message(f"Error fetching repository: {e}", "ERROR")
+    def select_base_repo(self):
+        """Allow user to select the base directory where multiple repos are stored."""
+        self.base_repo_path = filedialog.askdirectory(title="Select Base Repo Directory")
+        if self.base_repo_path:
+            self.update_log(f"Selected base repo directory: {self.base_repo_path}")
+            self.update_repo_list()
 
-
-def pull_repo():
-    """Pulls the latest changes from the remote repository and merges them into the current branch."""
-    selected_repo = repo_var.get()
-    if not os.path.isdir(selected_repo):
-        log_message(f"Invalid repository path: {selected_repo}", "ERROR")
-        return
-
-    try:
-        log_message("Pulling the latest changes from the remote repository...")
-        subprocess.run(["git", "pull"], cwd=selected_repo, check=True)
-        log_message("Repository pulled and merged successfully.", "SUCCESS")
-    except subprocess.CalledProcessError as e:
-        log_message(f"Error pulling repository: {e}", "ERROR")
-
-
-def clone_repository():
-    """Clones a GitHub repository into the specified directory."""
-    repo_url = clone_url_entry.get().strip()
-    if not repo_url:
-        log_message("Repository URL cannot be empty.", "ERROR")
-        return
-
-    destination_dir = base_path
-    log_message(f"Cloning repository from {repo_url} into {destination_dir}...")
-    try:
-        subprocess.run(["git", "clone", repo_url], cwd=destination_dir, check=True)
-        log_message("Repository cloned successfully.", "SUCCESS")
-        refresh_repo_list()  # Refresh the dropdown with the new repository
-    except subprocess.CalledProcessError as e:
-        log_message(f"Failed to clone repository: {e}", "ERROR")
-
-
-def refresh_repo_list():
-    """Refreshes the repository list in the dropdown."""
-    repos = get_git_repos(base_path)
-    repo_dropdown["values"] = repos
-    repo_dropdown["width"] = calculate_combobox_width(repos)
-    log_message("Repository list refreshed.", "INFO")
-
-
-def generate_and_push():
-    """Stages, commits, and pushes changes in the selected repository."""
-    try:
-        # Disable the button
-        button.config(state=tk.DISABLED)
-
-        # Clear the log and reset the progress bar
-        log_text.configure(state="normal")  # Enable writing to log panel
-        log_text.delete("1.0", tk.END)
-        log_text.configure(state="disabled")  # Set back to read-only
-        progress_bar["value"] = 0
-        progress_label.config(text="Progress: 0%")
-
-        # Get the selected repository path
-        selected_repo = repo_var.get()
-        if not os.path.isdir(selected_repo):
-            raise Exception(f"The selected path '{selected_repo}' is not valid.")
-
-        log_message(f"Selected repository path: {selected_repo}")
-        branch = branch_var.get()  # Get selected branch
-
-        # Get the commit message
-        commit_message = commit_msg_text.get("1.0", tk.END).strip()
-        if not commit_message:  # Use default message if none provided
-            commit_message = "Automatic commit: Updated repository"
-
-        log_message("Process started.")
-        start_time = time.time()
-
-        total_steps = 4  # Define the total number of steps
-
-        # Step 1: Stage all changes
-        log_message("Staging all changes in the repository...")
-        update_progress(1, total_steps)
-        subprocess.run(["git", "add", "."], cwd=selected_repo, check=True)
-        log_message("All changes staged successfully.", "SUCCESS")
-
-        # Check if there are any changes to commit
-        check_status = subprocess.run(
-            ["git", "diff", "--cached", "--exit-code"], cwd=selected_repo, capture_output=True
-        )
-
-        if check_status.returncode == 0:
-            log_message("No changes to commit. Exiting.", "INFO")
-            log_message("Process completed.")
-            update_progress(4, total_steps)
+    def update_repo_list(self):
+        """Fetch and display a list of repositories from the base directory."""
+        if not self.base_repo_path:
             return
 
-        # Step 2: Commit changes
-        log_message(f"Committing changes with message: '{commit_message}'...")
-        update_progress(2, total_steps)
-        subprocess.run(["git", "commit", "-m", commit_message], cwd=selected_repo, check=True)
-        log_message("Changes committed successfully.", "SUCCESS")
+        # Get all directories in the base directory that are git repositories
+        repos = [f for f in os.listdir(self.base_repo_path) if os.path.isdir(os.path.join(self.base_repo_path, f)) and os.path.exists(os.path.join(self.base_repo_path, f, ".git"))]
+        
+        if repos:
+            self.repo_combobox['values'] = repos
+            self.repo_combobox.set(repos[0])  # Select first repo by default
+        else:
+            self.repo_combobox['values'] = []
+            messagebox.showerror("Error", "No Git repositories found in the selected directory.")
 
-        # Step 3: Push changes to the remote repository
-        log_message("Pushing changes to the remote repository...")
-        update_progress(3, total_steps)
-        subprocess.run(["git", "push", "origin", branch], cwd=selected_repo, check=True)
-        log_message("Changes pushed successfully.", "SUCCESS")
+    def on_repo_selected(self, event):
+        """Handle repo selection and enable branch selection."""
+        repo_name = self.repo_combobox.get()
+        self.repo_path = os.path.join(self.base_repo_path, repo_name)
 
-        # Step 4: Complete
-        log_message("Process completed.")
-        update_progress(4, total_steps)
+        if self.repo_path and os.path.isdir(self.repo_path):
+            self.update_log(f"Selected repository: {self.repo_path}")
+            self.update_branch_list()
 
-        elapsed_time = time.time() - start_time
-        log_message(f"Process finished in {elapsed_time:.2f} seconds.", "INFO")
-        button.config(state=tk.NORMAL)  # Re-enable the button
-    except Exception as e:
-        log_message(f"Error: {e}", "ERROR")
-        button.config(state=tk.NORMAL)  # Re-enable the button
+    def update_branch_list(self):
+        """Fetch and display branches of the selected repo."""
+        if not self.repo_path:
+            return
 
+        branches = subprocess.run(["git", "branch", "-r"], cwd=self.repo_path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if branches.returncode == 0:
+            branch_list = [branch.strip() for branch in branches.stdout.splitlines()]
+            self.branch_combobox['values'] = branch_list
+            if branch_list:
+                self.branch_combobox.set(branch_list[0])
+            self.branch_combobox.config(state=tk.NORMAL)
+        else:
+            self.update_log("Failed to fetch branches.")
+            self.branch_combobox.config(state=tk.DISABLED)
 
-# Initialize the GUI
-root = tk.Tk()
-root.title("Git Automation Tool")
-root.geometry("800x600")
+    def git_config(self):
+        """Run the git config command."""
+        self.run_git_command(["git", "config", "--list"])
 
-# Left panel: Repo, branch, file selection
-left_frame = tk.Frame(root)
-left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+    def git_clone(self):
+        """Perform git clone operation."""
+        clone_url = simpledialog.askstring("Clone URL", "Enter the Git repository URL:")
+        if clone_url:
+            threading.Thread(target=self.clone_repo, args=(clone_url,)).start()
 
-repo_label = tk.Label(left_frame, text="Select Repository:")
-repo_label.pack(pady=5)
+    def clone_repo(self, clone_url):
+        """Clone the repository using Git."""
+        self.update_log(f"Cloning repository from {clone_url}...")
+        self.run_command_with_progress(["git", "clone", clone_url])
 
-repo_var = tk.StringVar()
-repo_dropdown = ttk.Combobox(left_frame, textvariable=repo_var, state="readonly")
-repo_dropdown.pack(pady=5)
-repo_dropdown.bind("<<ComboboxSelected>>", enable_refresh_button)
+    def git_add(self):
+        """Add changes to the staging area."""
+        if self.repo_path:
+            self.run_git_command(["git", "add", "."])
 
-# Fetch and Pull Buttons
-fetch_button = tk.Button(left_frame, text="Fetch", command=fetch_repo)
-fetch_button.pack(pady=5)
+    def git_commit(self):
+        """Commit changes to the repository."""
+        commit_msg = simpledialog.askstring("Commit Message", "Enter commit message:")
+        if commit_msg and self.repo_path:
+            self.run_git_command(["git", "commit", "-m", commit_msg])
 
-pull_button = tk.Button(left_frame, text="Pull", command=pull_repo)
-pull_button.pack(pady=5)
+    def git_push(self):
+        """Push changes to the remote repository."""
+        if self.repo_path:
+            if self.github_token:
+                self.update_log("Authenticating with GitHub for push...")
+                self.run_git_command(["git", "push", f"https://{self.github_token}@github.com/yourusername/yourrepo.git"])
+            else:
+                self.run_git_command(["git", "push"])
 
-# Refresh Button
-refresh_button = tk.Button(left_frame, text="Refresh Modified Files", state=tk.DISABLED, command=refresh_modified_files)
-refresh_button.pack(pady=5)
+    def git_pull(self):
+        """Pull latest changes from the remote repository."""
+        if self.repo_path:
+            self.run_command_with_progress(["git", "pull"])
 
-# File list
-file_list_label = tk.Label(left_frame, text="Modified Files:")
-file_list_label.pack(pady=5)
+    def git_branch(self):
+        """Display current branches and manage them."""
+        if self.repo_path:
+            self.run_git_command(["git", "branch"])
 
-file_list_text = tk.Text(left_frame, height=10, width=40, wrap=tk.WORD, state="disabled")
-file_list_text.pack(pady=5)
+    def git_merge(self):
+        """Merge a selected branch into the current branch."""
+        if self.repo_path:
+            target_branch = self.branch_combobox.get()
+            if target_branch:
+                self.run_git_command(["git", "merge", target_branch])
 
-# Commit Message
-commit_msg_label = tk.Label(left_frame, text="Commit Message:")
-commit_msg_label.pack(pady=5)
+    def authenticate_github(self):
+        """Authenticate GitHub with a personal access token (PAT)."""
+        token = simpledialog.askstring("GitHub Token", "Enter your GitHub Personal Access Token:")
+        if token:
+            self.github_token = token
+            self.update_log("GitHub authentication successful!")
 
-commit_msg_text = tk.Text(left_frame, height=4, width=40)
-commit_msg_text.pack(pady=5)
-
-# Branch Selection
-branch_label = tk.Label(left_frame, text="Select Branch:")
-branch_label.pack(pady=5)
-
-branch_var = tk.StringVar()
-branch_dropdown = ttk.Combobox(left_frame, textvariable=branch_var, state="readonly")
-branch_dropdown.pack(pady=5)
-
-# 'Generate and Push' Button
-button = tk.Button(left_frame, text="Generate and Push", state=tk.DISABLED, command=generate_and_push)
-button.pack(pady=10)
-
-# Right panel: Log and progress
-right_frame = tk.Frame(root)
-right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-log_label = tk.Label(right_frame, text="Log:")
-log_label.pack(pady=5)
-
-log_text = tk.Text(right_frame, height=20, width=50, wrap=tk.WORD, state="disabled")
-log_text.pack(pady=5)
-
-# Progress bar
-progress_label = tk.Label(right_frame, text="Progress: 0%")
-progress_label.pack(pady=5)
-
-progress_bar = ttk.Progressbar(right_frame, length=300, maximum=100, mode="determinate")
-progress_bar.pack(pady=5)
-
-# Initial repository path
-base_path = 'C:/Users/shsa0222/Desktop/DevOps'
-
-# Populate repository list and initialize branch dropdown
-refresh_repo_list()
-
-root.mainloop()
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = GitApp(root)
+    root.mainloop()
