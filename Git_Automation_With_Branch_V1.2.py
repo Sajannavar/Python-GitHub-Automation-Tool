@@ -165,6 +165,29 @@ def generate_and_push():
         button.config(state=tk.NORMAL)
 
 
+def clone_repository():
+    """Clones a GitHub repository into the base path."""
+    try:
+        repo_url = clone_url_text.get("1.0", tk.END).strip()
+        if not repo_url:
+            log_message("Please enter a valid GitHub repository URL.", "ERROR")
+            return
+
+        # Clone the repository into the base path
+        log_message(f"Cloning repository from {repo_url} into {base_path}...")
+        subprocess.run(["git", "clone", repo_url], cwd=base_path, check=True)
+        log_message(f"Repository cloned successfully from {repo_url}!", "SUCCESS")
+
+        # Refresh the repository dropdown with the new repo
+        new_repos = get_git_repos(base_path)
+        repo_dropdown["values"] = new_repos
+        log_message("Repository list updated.", "INFO")
+    except subprocess.CalledProcessError as e:
+        log_message(f"Git clone operation failed: {e}", "ERROR")
+    except Exception as e:
+        log_message(f"An error occurred while cloning: {e}", "ERROR")
+
+
 # GUI setup
 root = tk.Tk()
 root.title("Git Automation Tool")
@@ -212,6 +235,16 @@ file_list_text.pack(pady=5)
 
 refresh_button = tk.Button(repo_frame, text="Refresh Modified Files", command=refresh_modified_files)
 refresh_button.pack(pady=5)
+
+# Git Clone Section
+clone_label = tk.Label(repo_frame, text="Clone GitHub Repository:")
+clone_label.pack(pady=5)
+
+clone_url_text = tk.Text(repo_frame, height=2, width=40)
+clone_url_text.pack(pady=5)
+
+clone_button = tk.Button(repo_frame, text="Clone Repository", command=clone_repository)
+clone_button.pack(pady=10)
 
 # Log section
 log_frame = tk.Frame(root, relief=tk.SUNKEN, borderwidth=1)
